@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZFS ashift Interactive Guide & Calculator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- 
+    Chosen Palette: Warm Neutrals (Slate, Zinc, Stone)
+    Application Structure Plan: A guided calculator-first SPA. The user is immediately engaged with a tool to solve their primary problem ("What ashift should I use?"). Supporting information from the report is broken down into thematic, interactive sections (RMW explanation, Hardware Guide, Trade-off Visualizer) accessible via a top nav. This prioritizes user action and task completion over passive reading, making the dense technical information more digestible and useful.
+    Visualization & Content Choices: 1. RMW Penalty -> Goal: Explain a complex process -> Viz: HTML/CSS animated diagram -> Interaction: Hover to see steps -> Justification: Breaks down the penalty visually. 2. RAID-Z Performance vs Capacity -> Goal: Compare a key trade-off -> Viz: Static Bar Chart (Chart.js) -> Interaction: None -> Justification: A direct, impactful visualization of the benchmark data. 3. RAID-Z Padding Overhead -> Goal: Organize data and show relationships -> Viz: Interactive Bar Chart (Chart.js) -> Interaction: User clicks buttons to select vdev width and update chart data -> Justification: Transforms a static table into an exploratory tool, demonstrating the relationship between ashift, vdev width, and space efficiency.
+    CONFIRMATION: NO SVG graphics used. NO Mermaid JS used.
+    -->
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .nav-link { transition: color 0.2s, border-color 0.2s; }
+        .nav-link.active { color: #2563eb; border-bottom-color: #2563eb; }
+        .section { display: none; }
+        .section.active { display: block; }
+        .btn {
+            display: inline-block;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            font-weight: 500;
+            text-align: center;
+            cursor: pointer;
+            transition: background-color 0.3s, transform 0.2s;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .btn-primary { background-color: #2563eb; color: white; }
+        .btn-primary:hover { background-color: #1d4ed8; }
+        .btn-secondary { background-color: #f1f5f9; color: #1e293b; border: 1px solid #cbd5e1; }
+        .btn-secondary:hover { background-color: #e2e8f0; }
+        .btn:active { transform: scale(0.98); }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 800px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 350px;
+            max-height: 400px;
+        }
+        @media (min-width: 768px) {
+            .chart-container { height: 400px; max-height: 500px; }
+        }
+        .rmw-step { transition: all 0.3s ease-in-out; }
+        .rmw-container:hover .rmw-step { opacity: 0.6; }
+        .rmw-container:hover .rmw-step:hover { opacity: 1; transform: scale(1.05); background-color: #fefce8; }
+        .fade-in { animation: fadeIn 0.5s ease-in-out forwards; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800">
+
+    <header class="bg-white/80 backdrop-blur-md shadow-sm sticky top-0 z-50">
+        <nav class="container mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex items-center">
+                    <span class="font-bold text-xl text-blue-600">ashift.guide</span>
+                </div>
+                <div class="hidden md:block">
+                    <div class="ml-10 flex items-baseline space-x-4">
+                        <a href="#calculator" class="nav-link px-3 py-2 rounded-md text-sm font-medium text-slate-700 hover:text-blue-600 border-b-2 border-transparent">Calculator</a>
+                        <a href="#why-it-matters" class="nav-link px-3 py-2 rounded-md text-sm font-medium text-slate-700 hover:text-blue-600 border-b-2 border-transparent">Why It Matters</a>
+                        <a href="#hardware" class="nav-link px-3 py-2 rounded-md text-sm font-medium text-slate-700 hover:text-blue-600 border-b-2 border-transparent">Hardware</a>
+                        <a href="#tradeoffs" class="nav-link px-3 py-2 rounded-md text-sm font-medium text-slate-700 hover:text-blue-600 border-b-2 border-transparent">Trade-Offs</a>
+                        <a href="#recommendations" class="nav-link px-3 py-2 rounded-md text-sm font-medium text-slate-700 hover:text-blue-600 border-b-2 border-transparent">Recommendations</a>
+                    </div>
+                </div>
+            </div>
+        </nav>
+    </header>
+
+    <main class="container mx-auto p-4 sm:p-6 lg:p-8">
+        
+        <section id="calculator" class="section">
+            <div class="text-center mb-12">
+                <h1 class="text-4xl md:text-5xl font-bold text-slate-900 mb-4">The ZFS `ashift` Calculator</h1>
+                <p class="max-w-3xl mx-auto text-lg text-slate-600">Don't guess. The `ashift` property is the most critical, permanent setting for your ZFS pool. This guide will help you find the optimal value for your specific hardware to maximize performance and reliability.</p>
+            </div>
+
+            <div class="max-w-4xl mx-auto bg-white p-6 sm:p-8 rounded-xl shadow-lg border border-slate-200">
+                <div id="step1">
+                    <h3 class="text-2xl font-semibold mb-1 text-slate-900">Step 1: Select your Drive Type</h3>
+                    <p class="text-slate-600 mb-6">Choose the type of storage media you are adding to your ZFS pool.</p>
+                    <div class="grid sm:grid-cols-3 gap-4">
+                        <button onclick="selectDriveType('hdd')" class="p-6 text-left bg-slate-50 hover:bg-blue-50 border border-slate-200 rounded-lg transition">
+                            <span class="text-2xl">⚙️</span>
+                            <h4 class="font-bold text-lg mt-2">Rotational HDD</h4>
+                            <p class="text-sm text-slate-500">Traditional Hard Disk Drives (SATA/SAS).</p>
+                        </button>
+                         <button onclick="selectDriveType('ssd')" class="p-6 text-left bg-slate-50 hover:bg-blue-50 border border-slate-200 rounded-lg transition">
+                            <span class="text-2xl">⚡️</span>
+                            <h4 class="font-bold text-lg mt-2">SATA SSD</h4>
+                            <p class="text-sm text-slate-500">Solid-State Drives with a SATA interface.</p>
+                        </button>
+                         <button onclick="selectDriveType('nvme')" class="p-6 text-left bg-slate-50 hover:bg-blue-50 border border-slate-200 rounded-lg transition">
+                            <span class="text-2xl">🚀</span>
+                            <h4 class="font-bold text-lg mt-2">NVMe SSD</h4>
+                            <p class="text-sm text-slate-500">High-speed drives using the NVMe protocol.</p>
+                        </button>
+                    </div>
+                </div>
+
+                <div id="step2" class="hidden mt-8">
+                    <h3 class="text-2xl font-semibold mb-1 text-slate-900">Step 2: Get Physical Sector Size</h3>
+                    <p class="text-slate-600 mb-4">Run the following command on your Linux system (replacing `/dev/sdX` or `/dev/nvmeXn1` with your drive's path) and paste the relevant output line below.</p>
+                    <div class="bg-slate-900 text-white p-4 rounded-md font-mono text-sm mb-4">
+                        <code id="command-to-run"></code>
+                    </div>
+                    <label for="output-input" class="block text-sm font-medium text-slate-700 mb-2">Paste the key output line here:</label>
+                    <input type="text" id="output-input" class="w-full p-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="e.g., Sector size (logical/physical): 512 bytes / 4096 bytes">
+                    <button onclick="calculateAshift()" class="btn btn-primary mt-4">Calculate `ashift`</button>
+                </div>
+
+                <div id="step3" class="hidden mt-8">
+                    <!-- Result will be injected here -->
+                </div>
+            </div>
+        </section>
+
+        <section id="why-it-matters" class="section">
+             <div class="text-center mb-12">
+                <h2 class="text-4xl font-bold text-slate-900">The Cardinal Sin: Read-Modify-Write</h2>
+                <p class="max-w-3xl mx-auto mt-4 text-lg text-slate-600">Setting `ashift` too low is the most catastrophic mistake in ZFS. It forces your drive into a vicious cycle called Read-Modify-Write (RMW), crippling performance and accelerating wear on SSDs. This section explains how this happens.</p>
+            </div>
+
+            <div class="max-w-5xl mx-auto bg-white p-8 rounded-xl shadow-lg border border-slate-200">
+                <h3 class="text-2xl font-semibold text-center mb-2">How a Single Write Becomes Three Operations</h3>
+                 <p class="text-center text-slate-600 mb-8">When ZFS wants to write a 512-byte block (because of a wrong `ashift=9` setting) to a drive that physically uses 4096-byte sectors, the drive's controller must perform this inefficient sequence. Hover over each step to learn more.</p>
+
+                <div class="rmw-container flex flex-col md:flex-row items-center justify-center gap-4 md:gap-2 text-center">
+                    <div class="rmw-step p-6 border rounded-lg shadow-sm bg-white w-full md:w-1/3">
+                        <div class="text-4xl mb-2">1.</div>
+                        <h4 class="font-bold text-xl text-red-600">READ</h4>
+                        <p class="text-slate-600 mt-2">The drive reads the entire 4096-byte physical sector into its cache, even though ZFS only asked to write 512 bytes.</p>
+                    </div>
+                    <div class="text-4xl text-slate-300 mx-4 hidden md:block">&rarr;</div>
+                    <div class="rmw-step p-6 border rounded-lg shadow-sm bg-white w-full md:w-1/3">
+                         <div class="text-4xl mb-2">2.</div>
+                        <h4 class="font-bold text-xl text-yellow-600">MODIFY</h4>
+                        <p class="text-slate-600 mt-2">It modifies the 512-byte portion of the data within its cache, leaving the other 3584 bytes untouched.</p>
+                    </div>
+                    <div class="text-4xl text-slate-300 mx-4 hidden md:block">&rarr;</div>
+                    <div class="rmw-step p-6 border rounded-lg shadow-sm bg-white w-full md:w-1/3">
+                         <div class="text-4xl mb-2">3.</div>
+                        <h4 class="font-bold text-xl text-red-600">WRITE</h4>
+                        <p class="text-slate-600 mt-2">It writes the entire, modified 4096-byte block back to the physical media, causing unnecessary write amplification.</p>
+                    </div>
+                </div>
+                 <div class="mt-8 p-4 bg-red-50 text-red-800 rounded-lg border border-red-200">
+                    <p><span class="font-bold">The Impact:</span> This process transforms a single intended write operation into a sequence of a read, a modification, and a write. For a 4KiB file, this can mean **8 reads and 8 writes** instead of just one, severely degrading performance.</p>
+                </div>
+            </div>
+        </section>
+
+        <section id="hardware" class="section">
+             <div class="text-center mb-12">
+                <h2 class="text-4xl font-bold text-slate-900">Hardware Deep Dive</h2>
+                <p class="max-w-3xl mx-auto mt-4 text-lg text-slate-600">The optimal `ashift` value is a direct reflection of your drive's physical architecture. Learn the differences between drive types and why the "512e lie" is so dangerous for ZFS.</p>
+            </div>
+            <div class="max-w-5xl mx-auto bg-white p-8 rounded-xl shadow-lg border border-slate-200">
+                 <div class="mb-4 border-b border-slate-200">
+                    <nav class="-mb-px flex space-x-8" aria-label="Tabs">
+                        <button onclick="switchTab('hdd-tab')" class="tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm border-blue-500 text-blue-600">HDDs</button>
+                        <button onclick="switchTab('ssd-tab')" class="tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300">SSDs & NVMe</button>
+                    </nav>
+                </div>
+                <div id="hdd-tab" class="tab-content">
+                    <h3 class="text-2xl font-semibold mb-4">Hard Drive Sector Types</h3>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-slate-200">
+                            <thead class="bg-slate-50">
+                                <tr>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Drive Type</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Physical Sector</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Reported (Logical) Sector</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">ZFS Auto-Detect `ashift`</th>
+                                </tr>
+                            </thead>
+                            <tbody class="bg-white divide-y divide-slate-200">
+                                <tr>
+                                    <td class="px-6 py-4 whitespace-nowrap font-medium">512-native (512n)</td>
+                                    <td class="px-6 py-4 whitespace-nowrap">512 bytes</td>
+                                    <td class="px-6 py-4 whitespace-nowrap">512 bytes</td>
+                                    <td class="px-6 py-4 whitespace-nowrap"><span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">ashift=9 (Correct)</span></td>
+                                </tr>
+                                <tr class="bg-red-50">
+                                    <td class="px-6 py-4 whitespace-nowrap font-medium text-red-900">512-emulation (512e)</td>
+                                    <td class="px-6 py-4 whitespace-nowrap font-bold text-red-900">4096 bytes (4KiB)</td>
+                                    <td class="px-6 py-4 whitespace-nowrap font-bold text-red-900">512 bytes</td>
+                                    <td class="px-6 py-4 whitespace-nowrap"><span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">ashift=9 (Incorrect!)</span></td>
+                                </tr>
+                                <tr>
+                                    <td class="px-6 py-4 whitespace-nowrap font-medium">4K-native (4Kn)</td>
+                                    <td class="px-6 py-4 whitespace-nowrap">4096 bytes (4KiB)</td>
+                                    <td class="px-6 py-4 whitespace-nowrap">4096 bytes (4KiB)</td>
+                                    <td class="px-6 py-4 whitespace-nowrap"><span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">ashift=12 (Correct)</span></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="mt-4 p-4 bg-yellow-50 text-yellow-800 rounded-lg border border-yellow-200">
+                        <p><span class="font-bold">The 512e Lie:</span> Most modern HDDs are 512e. They lie to the OS for backward compatibility, causing ZFS auto-detection to choose the wrong `ashift`, leading to severe performance loss. This is why you must always set `ashift` manually.</p>
+                    </div>
+                </div>
+                 <div id="ssd-tab" class="tab-content hidden">
+                    <h3 class="text-2xl font-semibold mb-4">Flash Media (SSDs & NVMe)</h3>
+                     <p class="text-slate-600 mb-4">Flash drives use a different architecture (pages and blocks) than HDDs. While early advice suggested trying to match the drive's internal page size (e.g., `ashift=13` for 8K pages), modern evidence points to a clear winner.</p>
+                     <div class="bg-white rounded-lg p-6 border">
+                        <p class="text-slate-600"><span class="font-bold text-slate-800">The Modern Consensus: Use `ashift=12`.</span> Drive controllers are heavily optimized for the standard 4KiB I/O used by all modern operating systems. Benchmarks consistently show that `ashift=12` provides the best, or at least safest, performance for nearly all SSDs and NVMe drives.</p>
+                         <p class="mt-4 text-slate-600">Attempting to guess an internal page size can be counter-productive. Stick with the industry standard that drive firmware is designed to handle efficiently.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="tradeoffs" class="section">
+            <div class="text-center mb-12">
+                <h2 class="text-4xl font-bold text-slate-900">The Great Trade-Off</h2>
+                <p class="max-w-3xl mx-auto mt-4 text-lg text-slate-600">Choosing the correct `ashift` involves balancing performance and space efficiency. While `ashift=12` is vital for performance, it can lead to wasted space in RAID-Z configurations due to a "padding penalty."</p>
+            </div>
+            <div class="grid md:grid-cols-2 gap-8">
+                <div class="bg-white p-6 rounded-xl shadow-lg border border-slate-200">
+                    <h3 class="text-2xl font-semibold mb-4">RAID-Z3 Performance vs. Capacity</h3>
+                     <p class="text-slate-600 mb-4">This chart visualizes a benchmark on a 24-drive RAID-Z3 array. Choosing the correct `ashift=12` yields much higher performance, but at the cost of 5TiB of usable capacity compared to the misaligned `ashift=9`.</p>
+                    <div class="chart-container"><canvas id="raidz3-benchmark-chart"></canvas></div>
+                </div>
+                 <div class="bg-white p-6 rounded-xl shadow-lg border border-slate-200">
+                    <h3 class="text-2xl font-semibold mb-4">RAID-Z2 Padding Penalty (Interactive)</h3>
+                    <p class="text-slate-600 mb-4">Select a vdev width to see how the space overhead from padding changes dramatically between `ashift=9` and `ashift=12` for a small-block workload (recordsize=16k).</p>
+                     <div class="flex flex-wrap gap-2 mb-4">
+                        <button class="btn btn-secondary" onclick="updateRaidzOverheadChart(5)">5 Disks</button>
+                        <button class="btn btn-secondary" onclick="updateRaidzOverheadChart(6)">6 Disks</button>
+                        <button class="btn btn-secondary" onclick="updateRaidzOverheadChart(8)">8 Disks</button>
+                        <button class="btn btn-secondary" onclick="updateRaidzOverheadChart(10)">10 Disks</button>
+                        <button class="btn btn-secondary" onclick="updateRaidzOverheadChart(11)">11 Disks</button>
+                     </div>
+                    <div class="chart-container"><canvas id="raidz-overhead-chart"></canvas></div>
+                </div>
+            </div>
+            <div class="mt-8 max-w-5xl mx-auto p-4 bg-blue-50 text-blue-800 rounded-lg border border-blue-200">
+                <p><span class="font-bold">The Verdict:</span> The modern consensus is clear: always prioritize performance. The "horrible" write speeds and slow resilver times from a misaligned `ashift` are not worth the extra capacity. Accept the padding penalty as a cost of using RAID-Z with modern hardware.</p>
+            </div>
+        </section>
+
+        <section id="recommendations" class="section">
+             <div class="text-center mb-12">
+                <h2 class="text-4xl font-bold text-slate-900">Final Recommendations & Syntax</h2>
+                <p class="max-w-3xl mx-auto mt-4 text-lg text-slate-600">Synthesizing all the principles, here are clear, scenario-based recommendations and the exact command syntax you need to create a properly configured, future-proof ZFS pool.</p>
+            </div>
+             <div class="max-w-5xl mx-auto space-y-8">
+                <div class="bg-white p-8 rounded-xl shadow-lg border border-slate-200">
+                    <h3 class="text-2xl font-semibold text-slate-900">Rule #1: Future-Proof Your Pool</h3>
+                    <p class="text-slate-600 mt-2">The `ashift` property is immutable. A pool created with `ashift=9` cannot be repaired with modern 4K drives when a legacy disk fails. Therefore, the unbreakable rule is:</p>
+                    <div class="mt-4 p-4 bg-yellow-50 text-yellow-900 rounded-lg font-bold text-lg text-center">Always use `ashift=12` as the absolute minimum.</div>
+                </div>
+
+                <div class="bg-white p-8 rounded-xl shadow-lg border border-slate-200">
+                    <h3 class="text-2xl font-semibold text-slate-900">`zpool create` Command Example</h3>
+                    <p class="text-slate-600 mt-2 mb-4">This example shows how to create a high-performance mirrored pool with all the recommended settings for performance and longevity. Hover over the parameters for an explanation.</p>
+                     <div class="bg-slate-900 text-white p-4 rounded-md font-mono text-sm overflow-x-auto">
+<pre><code>sudo zpool create \
+    <span title="Manually sets the 4K physical sector size. The most critical parameter." class="text-cyan-400 cursor-pointer">-o ashift=12</span> \
+    <span title="Enables fast, efficient lz4 compression. Often improves performance." class="text-cyan-400 cursor-pointer">-O compression=lz4</span> \
+    <span title="Disables access time updates on reads, reducing I/O." class="text-cyan-400 cursor-pointer">-O atime=off</span> \
+    <span title="Stores extended attributes efficiently for apps like Samba." class="text-cyan-400 cursor-pointer">-O xattr=sa</span> \
+    mypool mirror /dev/disk/by-id/DRIVE1-SERIAL /dev/disk/by-id/DRIVE2-SERIAL
+</code></pre>
+                    </div>
+                    <div class="mt-4 p-4 bg-slate-100 text-slate-700 rounded-lg">
+                        <p><span class="font-bold">Pro Tip:</span> Always use stable device paths from `/dev/disk/by-id/`. Never use `/dev/sdX` names, as they can change between reboots and prevent your pool from importing.</p>
+                    </div>
+                </div>
+             </div>
+        </section>
+        
+    </main>
+
+    <footer class="text-center py-8 mt-8 border-t border-slate-200">
+        <p class="text-slate-500">ashift.guide - An interactive summary based on ZFS community knowledge.</p>
+    </footer>
+
+    <script>
+        const sections = document.querySelectorAll('.section');
+        const navLinks = document.querySelectorAll('.nav-link');
+        const commandTextEl = document.getElementById('command-to-run');
+        const outputInputEl = document.getElementById('output-input');
+        const step1El = document.getElementById('step1');
+        const step2El = document.getElementById('step2');
+        const step3El = document.getElementById('step3');
+        const tabBtns = document.querySelectorAll('.tab-btn');
+        const tabContents = document.querySelectorAll('.tab-content');
+
+        let selectedDriveType = null;
+        let raidzOverheadChart = null;
+        
+        const commands = {
+            hdd: 'sudo fdisk -l /dev/sdX',
+            ssd: 'sudo fdisk -l /dev/sdX',
+            nvme: 'sudo nvme id-ns -H /dev/nvmeXn1'
+        };
+
+        function navigateTo(hash) {
+            if (!hash) hash = '#calculator';
+            
+            sections.forEach(s => s.classList.remove('active', 'fade-in'));
+            navLinks.forEach(l => l.classList.remove('active'));
+
+            const targetSection = document.querySelector(hash);
+            const targetLink = document.querySelector(`a[href="${hash}"]`);
+
+            if (targetSection) {
+                targetSection.classList.add('active', 'fade-in');
+            }
+            if (targetLink) {
+                targetLink.classList.add('active');
+            }
+        }
+
+        function selectDriveType(type) {
+            selectedDriveType = type;
+            commandTextEl.textContent = commands[type];
+            step2El.style.display = 'block';
+            step3El.style.display = 'none';
+        }
+
+        function calculateAshift() {
+            const output = outputInputEl.value.trim();
+            if (!output) {
+                step3El.innerHTML = `<p class="text-red-600">Please paste the output from the command.</p>`;
+                step3El.style.display = 'block';
+                return;
+            }
+
+            let physicalSize = 0;
+            let resultHtml = '';
+
+            // Parser for fdisk output: "Sector size (logical/physical): 512 bytes / 4096 bytes"
+            const fdiskRegex = new RegExp("physical\\):\\s*\\d+\\s*bytes\\s*/\\s*(\\d+)\\s*bytes", "i");
+            const fdiskMatch = output.match(fdiskRegex);
+            if (fdiskMatch && fdiskMatch[1]) {
+                physicalSize = parseInt(fdiskMatch[1], 10);
+            }
+
+            // Parser for nvme-cli output: "Data Size: 4096 bytes"
+            const nvmeRegex = /Data Size:\s+(\d+)\s+bytes/i;
+            const nvmeMatch = output.match(nvmeRegex);
+            if(!physicalSize && nvmeMatch && nvmeMatch[1]) {
+                physicalSize = parseInt(nvmeMatch[1], 10);
+            }
+
+            let recommendedAshift = 0;
+            let explanation = '';
+
+            if (physicalSize >= 8192) {
+                recommendedAshift = 13;
+                explanation = `Your drive reports a physical sector size of ${physicalSize} bytes. Aligning to this with <strong>ashift=13</strong> (or higher) is an option, but be aware that <strong>ashift=12</strong> is often the best-performing and safest choice for modern drives due to firmware optimizations for 4K I/O.`;
+            } else if (physicalSize >= 4096) {
+                recommendedAshift = 12;
+                explanation = `Your drive reports a physical sector size of ${physicalSize} bytes. To avoid the catastrophic read-modify-write penalty, you must use <strong>ashift=12</strong>. This is the correct, performant, and future-proof choice for your hardware.`;
+            } else if (physicalSize >= 512) {
+                recommendedAshift = 12; // Future-proofing rule
+                 explanation = `Your drive reports a physical sector size of ${physicalSize} bytes. While <strong>ashift=9</strong> matches this, it is <strong>strongly recommended</strong> to use <strong>ashift=12</strong> for future-proofing. This ensures you can replace a failed drive with a modern 4K drive without issue.`;
+            } else {
+                 resultHtml = `<div class="p-4 bg-red-50 text-red-800 rounded-lg border border-red-200">
+                    <h4 class="font-bold text-lg">Could Not Parse Output</h4>
+                    <p class="mt-2">I couldn't determine the physical sector size from the text you pasted. Please ensure you are copying the correct line.</p>
+                    <p class="mt-1 text-sm">Example for fdisk: <code>Sector size (logical/physical): 512 bytes / 4096 bytes</code></p>
+                    <p class="mt-1 text-sm">Example for NVMe: <code>LBA Format  1 : Metadata Size: 0   bytes - Data Size: 4096 bytes - Relative Performance: 0   Best</code></p>
+                </div>`;
+                step3El.innerHTML = resultHtml;
+                step3El.style.display = 'block';
+                return;
+            }
+
+            resultHtml = `
+                <div class="p-6 bg-blue-50 text-blue-900 rounded-lg border border-blue-200">
+                    <h4 class="font-bold text-lg">Your Recommended \`ashift\` Value Is:</h4>
+                    <div class="text-6xl font-bold my-4 text-center text-blue-600">${recommendedAshift}</div>
+                    <p class="mt-2">${explanation}</p>
+                </div>
+                <div class="mt-6">
+                    <h4 class="font-semibold text-lg">Your \`zpool create\` Command:</h4>
+                     <div class="bg-slate-900 text-white p-4 mt-2 rounded-md font-mono text-sm overflow-x-auto">
+<pre><code>sudo zpool create \\
+    -o ashift=${recommendedAshift} \\
+    -O compression=lz4 \\
+    -O atime=off \\
+    mypool mirror /dev/disk/by-id/DRIVE1 /dev/disk/by-id/DRIVE2</code></pre>
+                    </div>
+                </div>
+            `;
+            step3El.innerHTML = resultHtml;
+            step3El.style.display = 'block';
+        }
+
+        function switchTab(targetTabId) {
+            tabContents.forEach(c => c.classList.add('hidden'));
+            tabBtns.forEach(b => {
+                b.classList.remove('border-blue-500', 'text-blue-600');
+                b.classList.add('border-transparent', 'text-slate-500', 'hover:text-slate-700', 'hover:border-slate-300');
+            });
+
+            const targetContent = document.getElementById(targetTabId);
+            const targetBtn = document.querySelector(`button[onclick="switchTab('${targetTabId}')"]`);
+
+            targetContent.classList.remove('hidden');
+            targetBtn.classList.add('border-blue-500', 'text-blue-600');
+            targetBtn.classList.remove('border-transparent', 'text-slate-500');
+        }
+        
+        function createRaidz3BenchmarkChart() {
+            const ctx = document.getElementById('raidz3-benchmark-chart').getContext('2d');
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['ashift=9 (Misaligned)', 'ashift=12 (Correct)'],
+                    datasets: [{
+                        label: 'Usable Capacity (TiB)',
+                        data: [74, 69],
+                        backgroundColor: '#60a5fa',
+                        yAxisID: 'y'
+                    }, {
+                        label: 'Write Speed (GB/s)',
+                        data: [1.1, 1.6],
+                        backgroundColor: '#2563eb',
+                        yAxisID: 'y1'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        title: { display: true, text: 'RAID-Z3: Performance vs. Capacity Trade-off' },
+                        tooltip: { mode: 'index', intersect: false }
+                    },
+                    scales: {
+                        y: { type: 'linear', display: true, position: 'left', title: { display: true, text: 'TiB' } },
+                        y1: { type: 'linear', display: true, position: 'right', title: { display: true, text: 'GB/s' }, grid: { drawOnChartArea: false } }
+                    }
+                }
+            });
+        }
+
+        function createRaidzOverheadChart(initialWidth) {
+             const ctx = document.getElementById('raidz-overhead-chart').getContext('2d');
+             raidzOverheadChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['ashift=9', 'ashift=12'],
+                    datasets: [{
+                        label: 'Space Overhead %',
+                        data: [], // will be populated by updateRaidzOverheadChart
+                        backgroundColor: ['#fca5a5', '#ef4444']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        title: { display: true, text: 'RAID-Z2 Overhead for a ' + initialWidth + '-Disk Vdev' },
+                        legend: { display: false },
+                         tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.dataset.label || '';
+                                    if (label) { label += ': '; }
+                                    if (context.parsed.y !== null) { label += context.parsed.y + '%'; }
+                                    return label;
+                                }
+                            }
+                        }
+                    },
+                    scales: { y: { beginAtZero: true, max: 60, title: { display: true, text: 'Overhead %' } } }
+                }
+            });
+            updateRaidzOverheadChart(initialWidth);
+        }
+
+        function updateRaidzOverheadChart(width) {
+            const overheadData = {
+                5: [11.1, 33.3],
+                6: [0.0, 50.0],
+                8: [11.1, 33.3],
+                10: [0.0, 50.0],
+                11: [0.0, 0.0]
+            };
+            raidzOverheadChart.data.datasets[0].data = overheadData[width];
+            raidzOverheadChart.options.plugins.title.text = 'RAID-Z2 Overhead for a ' + width + '-Disk Vdev';
+            raidzOverheadChart.update();
+        }
+
+
+        window.addEventListener('DOMContentLoaded', () => {
+            navigateTo(window.location.hash);
+            createRaidz3BenchmarkChart();
+            createRaidzOverheadChart(6);
+        });
+
+        window.addEventListener('hashchange', () => {
+            navigateTo(window.location.hash);
+        });
+
+    </script>
+</body>
+</html>
