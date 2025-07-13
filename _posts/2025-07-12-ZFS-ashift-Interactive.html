@@ -1,62 +1,67 @@
-<!DOCTYPE html>
-<html lang="en" class="scroll-smooth">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ZFS ashift Interactive Guide & Calculator</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <!-- 
-    Chosen Palette: Warm Neutrals (Slate, Zinc, Stone)
-    Application Structure Plan: A guided calculator-first SPA. The user is immediately engaged with a tool to solve their primary problem ("What ashift should I use?"). Supporting information from the report is broken down into thematic, interactive sections (RMW explanation, Hardware Guide, Trade-off Visualizer) accessible via a top nav. This prioritizes user action and task completion over passive reading, making the dense technical information more digestible and useful.
-    Visualization & Content Choices: 1. RMW Penalty -> Goal: Explain a complex process -> Viz: HTML/CSS animated diagram -> Interaction: Hover to see steps -> Justification: Breaks down the penalty visually. 2. RAID-Z Performance vs Capacity -> Goal: Compare a key trade-off -> Viz: Static Bar Chart (Chart.js) -> Interaction: None -> Justification: A direct, impactful visualization of the benchmark data. 3. RAID-Z Padding Overhead -> Goal: Organize data and show relationships -> Viz: Interactive Bar Chart (Chart.js) -> Interaction: User clicks buttons to select vdev width and update chart data -> Justification: Transforms a static table into an exploratory tool, demonstrating the relationship between ashift, vdev width, and space efficiency.
-    CONFIRMATION: NO SVG graphics used. NO Mermaid JS used.
-    -->
-    <style>
-        body { font-family: 'Inter', sans-serif; }
-        .nav-link { transition: color 0.2s, border-color 0.2s; }
-        .nav-link.active { color: #2563eb; border-bottom-color: #2563eb; }
-        .section { display: none; }
-        .section.active { display: block; }
-        .btn {
-            display: inline-block;
-            padding: 0.75rem 1.5rem;
-            border-radius: 0.5rem;
-            font-weight: 500;
-            text-align: center;
-            cursor: pointer;
-            transition: background-color 0.3s, transform 0.2s;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        .btn-primary { background-color: #2563eb; color: white; }
-        .btn-primary:hover { background-color: #1d4ed8; }
-        .btn-secondary { background-color: #f1f5f9; color: #1e293b; border: 1px solid #cbd5e1; }
-        .btn-secondary:hover { background-color: #e2e8f0; }
-        .btn:active { transform: scale(0.98); }
-        .chart-container {
-            position: relative;
-            width: 100%;
-            max-width: 800px;
-            margin-left: auto;
-            margin-right: auto;
-            height: 350px;
-            max-height: 400px;
-        }
-        @media (min-width: 768px) {
-            .chart-container { height: 400px; max-height: 500px; }
-        }
-        .rmw-step { transition: all 0.3s ease-in-out; }
-        .rmw-container:hover .rmw-step { opacity: 0.6; }
-        .rmw-container:hover .rmw-step:hover { opacity: 1; transform: scale(1.05); background-color: #fefce8; }
-        .fade-in { animation: fadeIn 0.5s ease-in-out forwards; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-    </style>
-</head>
-<body class="bg-slate-50 text-slate-800">
+---
+layout: post
+title: "ZFS ashift Interactive Guide & Calculator"
+date:   2025-07-12 20:56:00 -0400
+categories: zfs interactive guide
+seo:
+  title: "A Comprehensive Guide to ZFS ashift"
+  description: "An interactive guide and calculator to determine the optimal ZFS ashift value for your HDDs, SSDs, and NVMe drives, preventing performance loss."
+  keywords: "zfs, ashift, calculator, openzfs, hdd, ssd, nvme, 4k sector, performance, raid-z"
+---
 
+<!-- Head content from the interactive page -->
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ZFS ashift Interactive Guide & Calculator</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<!-- Styles from the interactive page -->
+<style>
+    body { font-family: 'Inter', sans-serif; }
+    .nav-link { transition: color 0.2s, border-color 0.2s; }
+    .nav-link.active { color: #2563eb; border-bottom-color: #2563eb; }
+    .section { display: none; }
+    .section.active { display: block; }
+    .btn {
+        display: inline-block;
+        padding: 0.75rem 1.5rem;
+        border-radius: 0.5rem;
+        font-weight: 500;
+        text-align: center;
+        cursor: pointer;
+        transition: background-color 0.3s, transform 0.2s;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .btn-primary { background-color: #2563eb; color: white; }
+    .btn-primary:hover { background-color: #1d4ed8; }
+    .btn-secondary { background-color: #f1f5f9; color: #1e293b; border: 1px solid #cbd5e1; }
+    .btn-secondary:hover { background-color: #e2e8f0; }
+    .btn:active { transform: scale(0.98); }
+    .chart-container {
+        position: relative;
+        width: 100%;
+        max-width: 800px;
+        margin-left: auto;
+        margin-right: auto;
+        height: 350px;
+        max-height: 400px;
+    }
+    @media (min-width: 768px) {
+        .chart-container { height: 400px; max-height: 500px; }
+    }
+    .rmw-step { transition: all 0.3s ease-in-out; }
+    .rmw-container:hover .rmw-step { opacity: 0.6; }
+    .rmw-container:hover .rmw-step:hover { opacity: 1; transform: scale(1.05); background-color: #fefce8; }
+    .fade-in { animation: fadeIn 0.5s ease-in-out forwards; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+</style>
+
+<!-- Body content from the interactive page -->
+<div class="bg-slate-50 text-slate-800">
     <header class="bg-white/80 backdrop-blur-md shadow-sm sticky top-0 z-50">
         <nav class="container mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex items-center justify-between h-16">
@@ -498,7 +503,7 @@
 
 
         window.addEventListener('DOMContentLoaded', () => {
-            navigateTo(window.location.hash);
+            navigateTo(window.location.hash || '#calculator');
             createRaidz3BenchmarkChart();
             createRaidzOverheadChart(6);
         });
@@ -508,5 +513,4 @@
         });
 
     </script>
-</body>
-</html>
+</div>
